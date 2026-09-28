@@ -26,11 +26,18 @@ namespace GeneSearchApp
                 return;
             }
 
-            List<ProteinData> proteins = new List<ProteinData>();
-            foreach (var line in File.ReadLines(sequencesPath))
+            List<ProteinData> proteins = LoadProteins(sequencesPath);
+            ProcessCommands(commandsPath, outputPath, proteins);
+
+            Console.WriteLine("Обработка завершена. Результаты сохранены в genedata.txt");
+        }
+
+        static List<ProteinData> LoadProteins(string path)
+        {
+            var proteins = new List<ProteinData>();
+            foreach (var line in File.ReadLines(path))
             {
                 if (string.IsNullOrWhiteSpace(line)) continue;
-
                 var parts = line.Split('\t');
                 if (parts.Length >= 3)
                 {
@@ -42,7 +49,11 @@ namespace GeneSearchApp
                     });
                 }
             }
+            return proteins;
+        }
 
+        static void ProcessCommands(string commandsPath, string outputPath, List<ProteinData> proteins)
+        {
             using (StreamWriter writer = new StreamWriter(outputPath))
             {
                 writer.WriteLine("Андрей Архипов");
@@ -60,72 +71,85 @@ namespace GeneSearchApp
 
                     writer.WriteLine("-----------------------------------------------------------------");
 
-                    if (commandType == "search")
+                    switch (commandType)
                     {
-                        string searchTarget = DecodeRLE(parts[1].Trim());
-                        writer.WriteLine($"{cmdNumberStr}  search  {searchTarget}");
-
-                        var matches = proteins.Where(p => p.Sequence.Contains(searchTarget)).ToList();
-
-                        if (matches.Count > 0)
-                        {
-                            foreach (var match in matches)
-                            {
-                                writer.WriteLine($"{match.Organism}     {match.Name}");
-                            }
-                        }
-                        else
-                        {
-                            writer.WriteLine("NOT FOUND");
-                        }
-                    }
-                    else if (commandType == "diff")
-                    {
-                        string protein1Name = parts[1].Trim();
-                        string protein2Name = parts[2].Trim();
-                        writer.WriteLine($"{cmdNumberStr}  diff  {protein1Name}  and  {protein2Name}");
-                        writer.Write("amino-acids difference: ");
-
-                        var p1 = proteins.FirstOrDefault(p => p.Name.Equals(protein1Name, StringComparison.OrdinalIgnoreCase));
-                        var p2 = proteins.FirstOrDefault(p => p.Name.Equals(protein2Name, StringComparison.OrdinalIgnoreCase));
-
-                        if (p1 == null || p2 == null)
-                        {
-                            List<string> missing = new List<string>();
-                            if (p1 == null) missing.Add(protein1Name);
-                            if (p2 == null) missing.Add(protein2Name);
-                            writer.WriteLine($"MISSING: {string.Join(", ", missing)}");
-                        }
-                        else
-                        {
-                            int diffCount = CalculateDiff(p1.Sequence, p2.Sequence);
-                            writer.WriteLine(diffCount);
-                        }
-                    }
-                    else if (commandType == "mode")
-                    {
-                        string proteinName = parts[1].Trim();
-                        writer.WriteLine($"{cmdNumberStr}  mode  {proteinName}");
-                        writer.Write("amino-acid occurs: ");
-
-                        var p = proteins.FirstOrDefault(x => x.Name.Equals(proteinName, StringComparison.OrdinalIgnoreCase));
-
-                        if (p == null)
-                        {
-                            writer.WriteLine($"MISSING: {proteinName}");
-                        }
-                        else
-                        {
-                            var (aminoAcid, count) = FindMode(p.Sequence);
-                            writer.WriteLine($"{aminoAcid} {count}");
-                        }
+                        case "search":
+                            ExecuteSearchCommand(writer, cmdNumberStr, parts, proteins);
+                            break;
+                        case "diff":
+                            ExecuteDiffCommand(writer, cmdNumberStr, parts, proteins);
+                            break;
+                        case "mode":
+                            ExecuteModeCommand(writer, cmdNumberStr, parts, proteins);
+                            break;
                     }
 
                     commandCounter++;
                 }
             }
+        }
 
-            Console.WriteLine("Обработка завершена. Результаты сохранены в genedata.txt");
+        static void ExecuteSearchCommand(StreamWriter writer, string cmdNumber, string[] parts, List<ProteinData> proteins)
+        {
+            string searchTarget = DecodeRLE(parts[1].Trim());
+            writer.WriteLine($"{cmdNumber}  search  {searchTarget}");
+
+            var matches = proteins.Where(p => p.Sequence.Contains(searchTarget)).ToList();
+
+            if (matches.Count > 0)
+            {
+                foreach (var match in matches)
+                {
+                    writer.WriteLine($"{match.Organism}     {match.Name}");
+                }
+            }
+            else
+            {
+                writer.WriteLine("NOT FOUND");
+            }
+        }
+
+        static void ExecuteDiffCommand(StreamWriter writer, string cmdNumber, string[] parts, List<ProteinData> proteins)
+        {
+            string protein1Name = parts[1].Trim();
+            string protein2Name = parts[2].Trim();
+            writer.WriteLine($"{cmdNumber}  diff  {protein1Name}  and  {protein2Name}");
+            writer.Write("amino-acids difference: ");
+
+            var p1 = proteins.FirstOrDefault(p => p.Name.Equals(protein1Name, StringComparison.OrdinalIgnoreCase));
+            var p2 = proteins.FirstOrDefault(p => p.Name.Equals(protein2Name, StringComparison.OrdinalIgnoreCase));
+
+            if (p1 == null || p2 == null)
+            {
+                List<string> missing = new List<string>();
+                if (p1 == null) missing.Add(protein1Name);
+                if (p2 == null) missing.Add(protein2Name);
+                writer.WriteLine($"MISSING: {string.Join(", ", missing)}");
+            }
+            else
+            {
+                int diffCount = CalculateDiff(p1.Sequence, p2.Sequence);
+                writer.WriteLine(diffCount);
+            }
+        }
+
+        static void ExecuteModeCommand(StreamWriter writer, string cmdNumber, string[] parts, List<ProteinData> proteins)
+        {
+            string proteinName = parts[1].Trim();
+            writer.WriteLine($"{cmdNumber}  mode  {proteinName}");
+            writer.Write("amino-acid occurs: ");
+
+            var p = proteins.FirstOrDefault(x => x.Name.Equals(proteinName, StringComparison.OrdinalIgnoreCase));
+
+            if (p == null)
+            {
+                writer.WriteLine($"MISSING: {proteinName}");
+            }
+            else
+            {
+                var (aminoAcid, count) = FindMode(p.Sequence);
+                writer.WriteLine($"{aminoAcid} {count}");
+            }
         }
 
         static string DecodeRLE(string input)
@@ -158,7 +182,6 @@ namespace GeneSearchApp
             {
                 if (seq1[i] != seq2[i]) diff++;
             }
-
             diff += (maxLength - minLength);
             return diff;
         }
@@ -171,11 +194,9 @@ namespace GeneSearchApp
                 if (counts.ContainsKey(c)) counts[c]++;
                 else counts[c] = 1;
             }
-
             var best = counts.OrderByDescending(kvp => kvp.Value)
                              .ThenBy(kvp => kvp.Key)
                              .First();
-
             return (best.Key, best.Value);
         }
     }
